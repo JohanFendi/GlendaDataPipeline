@@ -49,8 +49,8 @@ A Python pipeline for extracting, parsing, and structuring document data (curren
         This structure helps organize and extract both global and section-specific information from documents.
 
 3. **Prepare your CSV file**  
-    - Columns: `link`, `doctype`, `document`, `database`
-    - Example row:
+    - First row should be:  link,doctype,document,database
+    - Then enter your data. Example row:
       ```
       link,doctype,document,database
       "https://www.gu.se/en/study-gothenburg/data-management-dit034/syllabus/89ef0bbb-32ec-11ef-8651-fc591a704454",HTML,"Data Management DIT034","se_DIT034.jsonl"
