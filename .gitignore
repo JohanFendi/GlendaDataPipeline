@@ -1,0 +1,4 @@
+localDocs.csv
+remoteDocs.csv
+__pycache__/
+.env
