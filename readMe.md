@@ -1,5 +1,3 @@
-
-
 # Glenda Data Pipeline
 
 A Python pipeline for extracting, parsing, and structuring document data (currently HTML) using LLMs and custom parsers. Outputs structured data to JSONL files for further analysis.
@@ -31,7 +29,7 @@ A Python pipeline for extracting, parsing, and structuring document data (curren
 
 2. **Edit `src/config.py`**  
     - Set `DATABASE_FOLDER_PATH` (default: `database`)
-    - Set `CSV_FILE_NAME` (default: `remoteDocs.csv`)
+    - Set `CSV_FILE_NAME`
     - Configure field explanations and mappings as needed.
     - Explination of Constant vs. Varying Data:
         Constant data refers to information that remains the same across all sections of a document. For example, the document title or common tags that apply to the entire document.
@@ -67,7 +65,7 @@ A Python pipeline for extracting, parsing, and structuring document data (curren
 
 ## Supported Document Types
 
-- Currently: `HTML`
+- Currently: `HTML`, `PDF`
 - See `src/customTypes.py` and `src/DocumentParsing/` for how to add support for other types (e.g., PDF).
 
 ## Project Structure
@@ -81,7 +79,7 @@ A Python pipeline for extracting, parsing, and structuring document data (curren
 
 ## Limitations
 
-- Only remote HTML parsing is supported out of the box.
+- Only remote HTML and PDF parsing is supported out of the box.
 - Requires Akash API key for LLM operations.
 - CSV must be properly formatted.
 

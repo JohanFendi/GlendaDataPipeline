@@ -2,16 +2,21 @@ import csv
 import asyncio
 import pprint
 import json
+import sys
 from pathlib import Path
+from logging import INFO
+from colorama import Fore
 
 
+from src.Logging.CustomLogging import get_logger
 from src.DocumentParsing.Parser import Parser
 from src.customTypes import DocType
 from src.StringSectionParsing.SectionSeparator import SectionSeparator
 from src.FieldGetting.RegularFieldGetter import RegularFieldGetter
 from src.LLMPrompting.AkashPrompter import AkashPrompter
 from src.DocumentParsing.HTMLParser import RemoteHTMLParser
-from src.Exceptions import NoParserFoundError
+from src.DocumentParsing.PDFParser import PDFParser
+from src.Exceptions import NoParserFoundError, TagObjectNotFoundError, APIKeyNotFoundError
 from src.config import (REMOTE_DOCTYPE_PARSER_MAP, 
                         DOCTYPE_TASK_DESCRIPTION_MAP,
                         CONSTANT_MULTIPLES_EXPLINATIONS, 
@@ -46,6 +51,9 @@ def get_parser(doctype: str, doctype_parser_map: dict[str, Parser]) -> Parser:
         tags_to_remove = ["nav", "footer", "header", "script", "svg", "button", "style"]
         parser_type = "html.parser"
         return RemoteHTMLParser(tags_to_extract, tags_to_remove, parser_type)
+    elif issubclass(parser, PDFParser):
+        return PDFParser()
+    
     else:
         raise NoParserFoundError(f"No parser found for doctype: {doctype}")
     
@@ -98,66 +106,88 @@ async def get_varying_data(field_getter: RegularFieldGetter,
 
 
 def init_database(database_folder_path:str, database_file_name:str) -> Path: 
-    file_path = Path(database_folder_path) / database_file_name
+    folder_path = Path(database_folder_path)
+    folder_path.mkdir(parents=True, exist_ok=True)
+    file_path = folder_path / database_file_name
     file_path.touch()
     return file_path
 
 
-def write_to_database(file_path: Path, data: dict, verbose:bool = False) -> None:
-    if verbose:
-        print(f"Writing to database at: {file_path}")
-        pprint.pprint(data, indent=2)
+def write_to_database(file_path: Path, data_points: list[dict[str, any]]) -> None:
     with file_path.open("a") as f:
-        json.dump(data, f)
-        f.write("\n")  # Ensure each entry is on a new line
+        for data in data_points:
+            json.dump(data, f)
+            f.write("\n")  # Ensure each entry is on a new line
 
         
 async def main():
+    try: 
+        llm_prompter = AkashPrompter("Meta-Llama-3-3-70B-Instruct")
+    except APIKeyNotFoundError as e:
+        logger.exception(f"API key not found for link: {link}, doctype: {doctype}, doc_name: {doc_name}")
+        sys.exit()
+
     csv_file_name = CSV_FILE_NAME
     link_doctypes = load_links_and_doc_types(csv_file_name)
-    llm_prompter = AkashPrompter("Meta-Llama-3-3-70B-Instruct")
     separator = "||"
     section_separator = SectionSeparator()
+    logger = get_logger("%(asctime)s - %(name)s - %(levelname)s - %(message)s", "GlendaDataPipeline", "Error.log", INFO)
     field_getter = RegularFieldGetter(llm_prompter)
-    verbose = True
 
+    print_sectioning = False
+    print_data_points = True
     for link, doctype, doc_name, database_file_name in link_doctypes:
+        if doctype not in ["HTML", "PDF"]: 
+            print(Fore.RED + f"Skipping document: {doc_name}, because it is not of a supported doc_type. It is of type: {doctype}.")
+            continue
+        try: 
+            print(Fore.YELLOW + f"\nProcessing link: {link}, doctype: {doctype}, doc_name: {doc_name}\n")
+            parser = get_parser(doctype, REMOTE_DOCTYPE_PARSER_MAP)
+            string = parser.parse(link)
+            llm_task_description = get_sectioning_task_prompt(doctype, separator, DOCTYPE_TASK_DESCRIPTION_MAP)
+            llm_prompt = f"**Task description**:\n{llm_task_description}\n**Text**:\n{string}"
+            response = await llm_prompter.prompt(llm_prompt)
+            sections = section_separator.get_sections(response, separator)
+
+            if print_sectioning: 
+                print(Fore.WHITE + f"LLM prompt: {llm_prompt}\n\n")
+                print(Fore.WHITE + f"Number of sections found: {len(sections)}\n\n")
+                for i, section in enumerate(sections):
+                    print(Fore.WHITE + f"======Section {i}======\n{section}\n\n")
+
+            constant_data = await get_constant_data(field_getter, sections, separator, 
+                                                    CONSTANT_SINGLES_EXPLINATIONS, 
+                                                    CONSTANT_MULTIPLES_EXPLINATIONS,
+                                                    doc_name)
+            data_points = []
+
+            for section in sections: 
+                section_data = {}
+                section_data.update(constant_data)
+                varying_data = await get_varying_data(field_getter, section, separator, 
+                                                    VARYING_SINGLES_EXPLINATIONS, VARYING_MULTIPLES_EXPLINATIONS)
+                section_data.update(varying_data)
+                data_points.append(section_data)
+
+            if print_data_points:
+                print(Fore.GREEN + f"\nData points for {doc_name}:\n")
+                for i, elem in enumerate(data_points):
+                    print(Fore.WHITE + f"\nData point {i}:\n")
+                    pprint.pprint(elem, indent=2)
+
+            file_path = init_database(DATABASE_FOLDER_PATH, database_file_name)
+            write_to_database(file_path, data_points)
+            print(Fore.GREEN + f"\nData points for {doc_name} written to {file_path}.\n")
+
+        except NoParserFoundError as e:
+            logger.exception(f"No parser found for link: {link}, doctype: {doctype}, doc_name: {doc_name}")
+            sys.exit()
+        except TagObjectNotFoundError as e:
+            logger.exception(f"Tag object not found during parsing for link: {link}, doctype: {doctype}, doc_name: {doc_name}.")
+        except Exception as e:
+            logger.exception(f"Unexpected error for link: {link}, doctype: {doctype}, doc_name: {doc_name}")
+
         
-        parser = get_parser(doctype, REMOTE_DOCTYPE_PARSER_MAP)
-        string = parser.parse(link)
-        llm_task_description = get_sectioning_task_prompt(doctype, separator, DOCTYPE_TASK_DESCRIPTION_MAP)
-        llm_prompt = f"**Task description**:\n{llm_task_description}\n**Text**:\n{string}"
-        response = await llm_prompter.prompt(llm_prompt)
-        sections = section_separator.get_sections(response, separator)
-
-        if verbose: 
-            print(f"LLM prompt: {llm_prompt}\n\n")
-            print(f"Number of sections found: {len(sections)}\n\n")
-            for i, section in enumerate(sections):
-                print(f"======Section {i}====== {section}\n\n")
-
-        constant_data = await get_constant_data(field_getter, sections, separator, 
-                                                CONSTANT_SINGLES_EXPLINATIONS, 
-                                                CONSTANT_MULTIPLES_EXPLINATIONS,
-                                                doc_name)
-        data_points = []
-
-        for section in sections: 
-            section_data = {}
-            section_data.update(constant_data)
-            varying_data = await get_varying_data(field_getter, section, separator, 
-                                                  VARYING_SINGLES_EXPLINATIONS, VARYING_MULTIPLES_EXPLINATIONS)
-            section_data.update(varying_data)
-            data_points.append(section_data)
-
-        if verbose:
-            for elem in data_points:
-                pprint.pprint(elem, indent=2)
-
-        file_path = init_database(DATABASE_FOLDER_PATH, database_file_name)
-
-        for data_point in data_points:
-            write_to_database(file_path, data_point, verbose=verbose)
 
 
 if __name__ == "__main__":  

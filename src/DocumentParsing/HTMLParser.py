@@ -20,9 +20,9 @@ class RemoteHTMLParser(Parser):
 
     @override
     def parse(self,
-              url:str) -> str:
+              link:str) -> str:
 
-        resp = requests.get(url,timeout=10)
+        resp = requests.get(link,timeout=10)
         resp.raise_for_status()     
         html = resp.text    
 

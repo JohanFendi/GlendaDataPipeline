@@ -1,4 +1,9 @@
 localDocs.csv
-remoteDocs.csv
+remoteHTML.csv
+remotePDF.csv
+se.csv
 __pycache__/
 .env
+Error.log
+database/
+text.py

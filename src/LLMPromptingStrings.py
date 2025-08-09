@@ -3,7 +3,8 @@ You will be given plain text.
 
 1. Split the text into sections of 150–200 words.
 2. Preserve basic structure cues: treat short standalone lines as headings and lines that look like list items as "- item".
-3. Keep most text verbatim. Remove content only if it's clearly repetitive (exact duplicates) or clearly irrelevant navigation/technical noise (e.g., "Back to top", tracker IDs). Do NOT summarize or drop important sentences.
+3. Keep most text verbatim. Remove content only if it's exact duplicates or clearly irrelevant navigation/technical noise (e.g. tracker IDs, empty bullets, page numbers). 
+    Do NOT summarize or drop important sentences and lists.
 4. Prefer paragraph boundaries; if a paragraph exceeds 150–200 words, 
     split at the nearest earlier sentence boundary. Otherwise split at sentence or list-item boundaries. 
     Avoid leaving a heading alone.
